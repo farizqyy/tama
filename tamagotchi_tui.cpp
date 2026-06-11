@@ -3,9 +3,10 @@
 #include <vector>
 #include <ctime>
 #include <cstdlib>
-#include <cmath>
-#include <iomanip>
+#include <fstream>
 #include <sstream>
+#include <iomanip>
+#include <cmath>
 
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_base.hpp"
@@ -67,24 +68,88 @@ void addLog(Tamagotchi& t, const std::string& action, const std::string& detail)
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FRUTIGER AERO COLORS
+// IMPROVED FRUTIGER AERO COLORS (Better Contrast)
 // ═══════════════════════════════════════════════════════════════
 
-// Sky blue gradient (aero signature)
-Color aero_light_blue = Color::RGB(173, 216, 230);   // Light blue
-Color aero_sky = Color::RGB(135, 206, 250);          // Sky blue
-Color aero_deep_blue = Color::RGB(70, 130, 180);     // Steel blue
+// Background: Light gradient
+Color bg_light_blue = Color::RGB(200, 230, 250);      // Very light blue
+Color bg_gradient = Color::RGB(230, 240, 250);         // Almost white-blue
 
-// Highlight colors (glossy effect)
-Color aero_white = Color::RGB(255, 255, 255);
-Color aero_light_gray = Color::RGB(240, 240, 240);
-Color aero_medium_gray = Color::RGB(192, 192, 192);
-Color aero_dark_gray = Color::RGB(64, 64, 64);
+// Primary UI: Strong blues
+Color primary_dark = Color::RGB(41, 128, 185);         // Strong steel blue
+Color primary_light = Color::RGB(52, 152, 219);        // Bright sky blue
 
-// Accent colors (vibrant aero palette)
-Color aero_orange = Color::RGB(255, 165, 0);         // Warm orange
-Color aero_green = Color::RGB(144, 238, 144);        // Light green
-Color aero_cyan = Color::RGB(0, 206, 209);           // Dark turquoise
+// Accent colors: High contrast against light background
+Color accent_orange = Color::RGB(230, 126, 34);        // Darker orange
+Color accent_green = Color::RGB(39, 174, 96);          // Darker green
+Color accent_cyan = Color::RGB(26, 188, 156);          // Darker teal
+Color accent_red = Color::RGB(231, 76, 60);            // Darker red
+
+// Text colors
+Color text_dark = Color::RGB(44, 62, 80);              // Very dark gray
+Color text_light = Color::RGB(255, 255, 255);          // White
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE/LOAD SUPPORT
+// ═══════════════════════════════════════════════════════════════
+
+bool savePet(const Tamagotchi& pet, const std::string& filename = "tama_save.txt") {
+    std::ofstream file(filename);
+    if (!file.is_open()) return false;
+    
+    file << pet.name << "\n";
+    file << pet.hunger << " " << pet.happiness << " " << pet.energy << " " << pet.health << "\n";
+    file << pet.age << " " << (pet.alive ? 1 : 0) << "\n";
+    file << pet.logs.size() << "\n";
+    
+    for (const auto& log : pet.logs) {
+        file << log.timestamp << "|" << log.action << "|" << log.detail << "\n";
+    }
+    
+    file.close();
+    return true;
+}
+
+bool loadPet(Tamagotchi& pet, const std::string& filename = "tama_save.txt") {
+    std::ifstream file(filename);
+    if (!file.is_open()) return false;
+    
+    std::getline(file, pet.name);
+    file >> pet.hunger >> pet.happiness >> pet.energy >> pet.health;
+    file >> pet.age;
+    
+    int alive_int;
+    file >> alive_int;
+    pet.alive = (alive_int == 1);
+    
+    size_t log_count;
+    file >> log_count;
+    file.ignore();  // Ignore newline after log_count
+    
+    for (size_t i = 0; i < log_count; i++) {
+        std::string line;
+        std::getline(file, line);
+        
+        size_t pos1 = line.find('|');
+        size_t pos2 = line.find('|', pos1 + 1);
+        
+        if (pos1 != std::string::npos && pos2 != std::string::npos) {
+            StatusLog log;
+            log.timestamp = line.substr(0, pos1);
+            log.action = line.substr(pos1 + 1, pos2 - pos1 - 1);
+            log.detail = line.substr(pos2 + 1);
+            pet.logs.push_back(log);
+        }
+    }
+    
+    file.close();
+    return true;
+}
+
+bool saveFileExists(const std::string& filename = "tama_save.txt") {
+    std::ifstream file(filename);
+    return file.good();
+}
 
 // ═══════════════════════════════════════════════════════════════
 // UI COMPONENTS
@@ -92,9 +157,9 @@ Color aero_cyan = Color::RGB(0, 206, 209);           // Dark turquoise
 
 Element aeroGradientBox(const std::string& title, Element content) {
     return window(
-        text(title) | bold | color(aero_dark_gray),
-        content | color(aero_dark_gray)
-    ) | border | bgcolor(aero_light_gray);
+        text(title) | bold | color(text_light) | bgcolor(primary_dark),
+        content | color(text_dark)
+    ) | border | color(primary_dark) | bgcolor(bg_light_blue);
 }
 
 Element statusBar(const std::string& label, int value, Color barColor) {
@@ -111,9 +176,9 @@ Element statusBar(const std::string& label, int value, Color barColor) {
     ss << std::setw(3) << value << "%";
     
     return hbox({
-        text(label) | size(WIDTH, EQUAL, 12),
+        text(label) | size(WIDTH, EQUAL, 12) | color(text_dark),
         text(bar) | color(barColor),
-        text(ss.str()) | color(aero_dark_gray)
+        text(ss.str()) | color(text_dark)
     });
 }
 
@@ -123,8 +188,8 @@ Element tamagotchiDisplay(const Tamagotchi& pet) {
     // Title with age
     stats.push_back(
         hbox({
-            text("🐾 " + pet.name) | bold | color(aero_deep_blue),
-            text(" | Day " + std::to_string(pet.age)) | color(aero_dark_gray)
+            text("🐾 " + pet.name) | bold | color(primary_dark),
+            text(" | Day " + std::to_string(pet.age)) | color(primary_light)
         }) | center
     );
     
@@ -132,7 +197,7 @@ Element tamagotchiDisplay(const Tamagotchi& pet) {
     
     // Status indicator
     std::string status = pet.alive ? "✓ ALIVE" : "✗ DECEASED";
-    Color statusColor = pet.alive ? aero_green : Color::Red;
+    Color statusColor = pet.alive ? accent_green : accent_red;
     stats.push_back(
         text(status) | color(statusColor) | bold | center
     );
@@ -140,18 +205,21 @@ Element tamagotchiDisplay(const Tamagotchi& pet) {
     stats.push_back(text(""));  // Spacing
     
     // Stats bars
-    stats.push_back(text("═══════════════════════") | center);
-    stats.push_back(statusBar("Fullness ", 100 - pet.hunger, aero_orange));
-    stats.push_back(statusBar("Happiness", pet.happiness, aero_cyan));
-    stats.push_back(statusBar("Energy   ", pet.energy, aero_green));
-    stats.push_back(statusBar("Health   ", pet.health, aero_sky));
-    stats.push_back(text("═══════════════════════") | center);
+    stats.push_back(text("═══════════════════════") | center | color(primary_light));
+    stats.push_back(statusBar("Fullness ", 100 - pet.hunger, accent_orange));
+    stats.push_back(statusBar("Happiness", pet.happiness, accent_cyan));
+    stats.push_back(statusBar("Energy   ", pet.energy, accent_green));
+    stats.push_back(statusBar("Health   ", pet.health, primary_light));
+    stats.push_back(text("═══════════════════════") | center | color(primary_light));
     
     return vbox(stats);
 }
 
-Element actionButton(const std::string& label) {
-    return text(" " + label + " ") | border | center | bold;
+Element actionButton(const std::string& label, const std::string& key) {
+    return hbox({
+        text(" " + label + " ") | border | center | bold | color(text_light) | bgcolor(primary_dark),
+        text(" [" + key + "]") | color(primary_light)
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -159,6 +227,7 @@ Element actionButton(const std::string& label) {
 // ═══════════════════════════════════════════════════════════════
 
 void feedPet(Tamagotchi& t) {
+    if (!t.alive) return;
     t.hunger = clamp(t.hunger - 30, 0, 100);
     t.happiness = clamp(t.happiness + 10, 0, 100);
     t.energy = clamp(t.energy + 5, 0, 100);
@@ -166,6 +235,7 @@ void feedPet(Tamagotchi& t) {
 }
 
 void playWithPet(Tamagotchi& t) {
+    if (!t.alive) return;
     if (t.energy < 20) {
         addLog(t, "PLAY", "Too tired... 😴");
         return;
@@ -177,6 +247,7 @@ void playWithPet(Tamagotchi& t) {
 }
 
 void sleepPet(Tamagotchi& t) {
+    if (!t.alive) return;
     t.energy = clamp(t.energy + 40, 0, 100);
     t.hunger = clamp(t.hunger + 10, 0, 100);
     t.health = clamp(t.health + 5, 0, 100);
@@ -184,43 +255,55 @@ void sleepPet(Tamagotchi& t) {
 }
 
 void healPet(Tamagotchi& t) {
+    if (!t.alive) return;
     t.health = clamp(t.health + 30, 0, 100);
     t.energy = clamp(t.energy + 10, 0, 100);
     addLog(t, "HEAL", "Feeling better! 💊");
 }
 
-void ageTick(Tamagotchi& t) {
+void ageAndEventTick(Tamagotchi& t) {
+    if (!t.alive) return;
+    
+    // Age the pet
     t.age++;
     t.hunger = clamp(t.hunger + 10, 0, 100);
     t.happiness = clamp(t.happiness - 5, 0, 100);
     t.energy = clamp(t.energy - 8, 0, 100);
     
+    // Apply stat penalties
     if (t.hunger >= 80) t.health = clamp(t.health - 15, 0, 100);
     if (t.happiness <= 20) t.health = clamp(t.health - 5, 0, 100);
     
+    // Check death condition
     if (t.hunger >= 100 || t.health <= 0) {
         t.alive = false;
         addLog(t, "DIED", "Rest in peace... 💀");
+        return;
+    }
+    
+    // Random event (60% chance)
+    if ((std::rand() % 100) < 60) {
+        const char* events[] = {
+            "Found fruit! 🍎",
+            "Sunny day! ☀️",
+            "Caught a cold 🤧",
+            "Made a friend! 👫",
+            "Lost in thought... 💭"
+        };
+        
+        int idx = std::rand() % 5;
+        int hunger_delta = std::rand() % 20 - 10;
+        int happiness_delta = std::rand() % 20 - 10;
+        int health_delta = std::rand() % 20 - 10;
+        
+        t.hunger = clamp(t.hunger + hunger_delta, 0, 100);
+        t.happiness = clamp(t.happiness + happiness_delta, 0, 100);
+        t.health = clamp(t.health + health_delta, 0, 100);
+        
+        addLog(t, "TIME+EVENT", std::string("Day ") + std::to_string(t.age) + " - " + events[idx]);
     } else {
         addLog(t, "TIME", "Day " + std::to_string(t.age));
     }
-}
-
-void randomEvent(Tamagotchi& t) {
-    const char* events[] = {
-        "Found fruit! 🍎",
-        "Sunny day! ☀️",
-        "Caught a cold 🤧",
-        "Made a friend! 👫",
-        "Lost in thought... 💭"
-    };
-    
-    int idx = std::rand() % 5;
-    t.hunger = clamp(t.hunger + (std::rand() % 20 - 10), 0, 100);
-    t.happiness = clamp(t.happiness + (std::rand() % 20 - 10), 0, 100);
-    t.health = clamp(t.health + (std::rand() % 20 - 10), 0, 100);
-    
-    addLog(t, "EVENT", events[idx]);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -230,8 +313,8 @@ void randomEvent(Tamagotchi& t) {
 class TamagotchiApp {
 public:
     Tamagotchi pet;
-    int selected_tab = 0;
-    int log_scroll = 0;
+    std::string status_message;
+    int message_timeout = 0;
     
     TamagotchiApp(const std::string& name) : pet() {
         pet.name = name;
@@ -241,14 +324,15 @@ public:
         pet.health = 100;
         pet.age = 0;
         pet.alive = true;
+        status_message = "";
         addLog(pet, "BORN", "Welcome to the world!");
     }
     
     Element renderHeader() {
         return vbox({
-            text(" ╔═══════════════════════════════════════╗ ") | color(aero_deep_blue),
-            text(" ║     🐾 TAMAGOTCHI AERO 🐾           ║ ") | color(aero_deep_blue),
-            text(" ╚═══════════════════════════════════════╝ ") | color(aero_deep_blue),
+            text(" ╔═══════════════════════════════════════╗ ") | color(primary_dark),
+            text(" ║     🐾 TAMAGOTCHI AERO 🐾           ║ ") | color(text_light) | bgcolor(primary_dark),
+            text(" ╚═══════════════════════════════════════╝ ") | color(primary_dark),
         });
     }
     
@@ -258,32 +342,39 @@ public:
     
     Element renderActions() {
         return vbox({
-            text(" ACTIONS ") | bold | color(aero_deep_blue),
+            text(" ACTIONS (Press 1-8) ") | bold | color(text_light) | bgcolor(primary_dark),
+            text(""),
             hbox({
-                actionButton("🍽️  FEED") | flex,
+                actionButton("🍽️  FEED", "1") | flex,
                 text(" "),
-                actionButton("🎮 PLAY") | flex,
+                actionButton("🎮 PLAY", "2") | flex,
             }),
             text(""),
             hbox({
-                actionButton("😴 SLEEP") | flex,
+                actionButton("😴 SLEEP", "3") | flex,
                 text(" "),
-                actionButton("💊 HEAL") | flex,
+                actionButton("💊 HEAL", "4") | flex,
             }),
             text(""),
             hbox({
-                actionButton("⏰ TIME") | flex,
+                actionButton("📅 TIME+EVENT", "5") | flex,
                 text(" "),
-                actionButton("🎲 EVENT") | flex,
+                actionButton("💾 SAVE", "6") | flex,
             }),
-        }) | border | bgcolor(aero_light_gray);
+            text(""),
+            hbox({
+                actionButton("📂 LOAD", "7") | flex,
+                text(" "),
+                actionButton("❌ QUIT", "8") | flex,
+            }),
+        }) | border | color(primary_dark) | bgcolor(bg_light_blue);
     }
     
     Element renderLogs() {
         std::vector<Element> log_elements;
         
         log_elements.push_back(
-            text(" ACTIVITY LOG ") | bold | color(aero_deep_blue)
+            text(" ACTIVITY LOG ") | bold | color(text_light) | bgcolor(primary_dark)
         );
         
         int start = std::max(0, (int)pet.logs.size() - 10);
@@ -293,14 +384,28 @@ public:
             std::string log_line = "[" + log.timestamp + "] " + 
                                   log.action + ": " + log.detail;
             log_elements.push_back(
-                text(log_line) | color(aero_dark_gray)
+                text(log_line) | color(text_dark)
             );
         }
         
-        return vbox(log_elements) | border | bgcolor(aero_light_gray) | flex;
+        if (!status_message.empty() && message_timeout > 0) {
+            log_elements.push_back(text(""));
+            log_elements.push_back(
+                text(">>> " + status_message) | bold | color(accent_green)
+            );
+        }
+        
+        return vbox(log_elements) | border | color(primary_dark) | bgcolor(bg_light_blue) | flex;
+    }
+    
+    void setStatusMessage(const std::string& msg) {
+        status_message = msg;
+        message_timeout = 3;  // Show for 3 renders
     }
     
     Element render() {
+        if (message_timeout > 0) message_timeout--;
+        
         return vbox({
             renderHeader(),
             text(""),
@@ -311,7 +416,7 @@ public:
             }) | flex,
             text(""),
             renderLogs() | flex,
-        }) | bgcolor(aero_light_blue);
+        }) | bgcolor(bg_gradient);
     }
 };
 
@@ -326,7 +431,12 @@ int main() {
     
     TamagotchiApp app("Tama");
     
-    auto component = Container::Vertical({});
+    // Try to load existing save
+    if (saveFileExists()) {
+        if (loadPet(app.pet)) {
+            app.setStatusMessage("Game loaded from tama_save.txt!");
+        }
+    }
     
     std::function<void()> quit = screen.ExitLoopClosure();
     
@@ -335,22 +445,36 @@ int main() {
         return app.render();
     });
     
-    // Simple button handlers
+    // Numeric keybind handlers (1-8)
     auto handle_input = [&](Event event) {
-        if (event == Event::Character('q')) {
+        if (event == Event::Character('1')) {
+            feedPet(app.pet);
+        } else if (event == Event::Character('2')) {
+            playWithPet(app.pet);
+        } else if (event == Event::Character('3')) {
+            sleepPet(app.pet);
+        } else if (event == Event::Character('4')) {
+            healPet(app.pet);
+        } else if (event == Event::Character('5')) {
+            ageAndEventTick(app.pet);
+        } else if (event == Event::Character('6')) {
+            if (savePet(app.pet)) {
+                app.setStatusMessage("Game saved to tama_save.txt");
+            } else {
+                app.setStatusMessage("Failed to save game!");
+            }
+        } else if (event == Event::Character('7')) {
+            Tamagotchi loaded_pet;
+            if (loadPet(loaded_pet)) {
+                app.pet = loaded_pet;
+                app.setStatusMessage("Game loaded from tama_save.txt!");
+            } else {
+                app.setStatusMessage("Failed to load game!");
+            }
+        } else if (event == Event::Character('8')) {
             quit();
-        } else if (event == Event::Character('f')) {
-            if (app.pet.alive) feedPet(app.pet);
-        } else if (event == Event::Character('p')) {
-            if (app.pet.alive) playWithPet(app.pet);
-        } else if (event == Event::Character('s')) {
-            if (app.pet.alive) sleepPet(app.pet);
-        } else if (event == Event::Character('h')) {
-            if (app.pet.alive) healPet(app.pet);
-        } else if (event == Event::Character('t')) {
-            if (app.pet.alive) ageTick(app.pet);
-        } else if (event == Event::Character('e')) {
-            if (app.pet.alive) randomEvent(app.pet);
+        } else if (event == Event::Character('q')) {
+            quit();
         }
         return false;
     };
