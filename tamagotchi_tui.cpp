@@ -39,8 +39,21 @@ struct Tamagotchi {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// UTILITIES
+// RANDOM ENCOUNTER DEFINITION
 // ═══════════════════════════════════════════════════════════════
+
+struct Encounter {
+    std::string title;          // Short name
+    std::string description;    // What happened to tamagotchi
+    int hunger_delta;
+    int happiness_delta;
+    int energy_delta;
+    int health_delta;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════��═══════════════════
 
 template<typename T>
 inline T clamp(T value, T minVal, T maxVal) {
@@ -66,6 +79,39 @@ void addLog(Tamagotchi& t, const std::string& action, const std::string& detail)
         t.logs.erase(t.logs.begin());
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// ENCOUNTER TABLE
+// ═══════════════════════════════════════════════════════════════
+
+const Encounter ENCOUNTER_TABLE[] = {
+    // Neutral/Good events
+    { "Nap Time", "Tamagotchi fell asleep and took a nap 😴", +5, 0, +20, +5 },
+    { "Found Food", "Tamagotchi found some tasty leftovers 🍖", -25, +10, 0, 0 },
+    { "Sunny Day", "Beautiful weather made Tamagotchi feel great ☀️", -5, +20, +5, +10 },
+    { "Found Fruit", "Tamagotchi discovered a fresh juicy fruit 🍎", -20, +15, 0, +5 },
+    
+    // Mixed/Bad events
+    { "Got Rained On", "Tamagotchi got caught in the rain and got wet 🌧️", +5, -10, -15, -10 },
+    { "Got Sick", "Tamagotchi caught a cold and feels awful 🤧", +10, -20, -15, -30 },
+    { "Made a Friend", "Tamagotchi made a new friend and played together 👫", +5, +30, -10, +5 },
+    { "Bad Dream", "Tamagotchi had a terrible nightmare 😰", 0, -25, 0, -10 },
+    
+    // More varied impacts
+    { "Lost in Thought", "Tamagotchi got distracted and spaced out 💭", +15, -15, 0, -5 },
+    { "Ate Too Much", "Tamagotchi ate too much and felt bloated 🤢", +30, -5, -10, -15 },
+    { "Danced Around", "Tamagotchi danced around with joy 💃", 0, +25, -20, 0 },
+    { "Found a Toy", "Tamagotchi found an old toy to play with 🧸", -10, +20, -5, 0 },
+    
+    // Extreme encounters
+    { "Earthquake!", "The ground shook! Tamagotchi got startled 😱", 0, -30, -20, -20 },
+    { "Found Money", "Lucky! Tamagotchi found some coins 💰", -15, +35, +10, +10 },
+    { "Fought with Bug", "Tamagotchi fought a big scary bug 🐛", +20, -20, -25, -15 },
+    { "Meteor Shower", "Tamagotchi watched beautiful meteor shower ⭐", 0, +30, +5, 0 },
+};
+
+const int ENCOUNTER_COUNT = sizeof(ENCOUNTER_TABLE) / sizeof(ENCOUNTER_TABLE[0]);
+const int ENCOUNTER_CHANCE = 60;  // 60% chance each day
 
 // ═══════════════════════════════════════════════════════════════
 // IMPROVED FRUTIGER AERO COLORS (Better Contrast)
@@ -261,7 +307,7 @@ void healPet(Tamagotchi& t) {
     addLog(t, "HEAL", "Feeling better! 💊");
 }
 
-void ageAndEventTick(Tamagotchi& t) {
+void passTime(Tamagotchi& t) {
     if (!t.alive) return;
     
     // Age the pet
@@ -281,34 +327,26 @@ void ageAndEventTick(Tamagotchi& t) {
         return;
     }
     
-    // Random event (60% chance)
-    if ((std::rand() % 100) < 60) {
-        const char* events[] = {
-            "Found fruit! 🍎",
-            "Sunny day! ☀️",
-            "Caught a cold 🤧",
-            "Made a friend! 👫",
-            "Lost in thought... 💭"
-        };
+    // Random encounter (60% chance)
+    if ((std::rand() % 100) < ENCOUNTER_CHANCE) {
+        const Encounter& enc = ENCOUNTER_TABLE[std::rand() % ENCOUNTER_COUNT];
         
-        int idx = std::rand() % 5;
-        int hunger_delta = std::rand() % 20 - 10;
-        int happiness_delta = std::rand() % 20 - 10;
-        int health_delta = std::rand() % 20 - 10;
+        t.hunger = clamp(t.hunger + enc.hunger_delta, 0, 100);
+        t.happiness = clamp(t.happiness + enc.happiness_delta, 0, 100);
+        t.energy = clamp(t.energy + enc.energy_delta, 0, 100);
+        t.health = clamp(t.health + enc.health_delta, 0, 100);
         
-        t.hunger = clamp(t.hunger + hunger_delta, 0, 100);
-        t.happiness = clamp(t.happiness + happiness_delta, 0, 100);
-        t.health = clamp(t.health + health_delta, 0, 100);
-        
-        addLog(t, "TIME+EVENT", std::string("Day ") + std::to_string(t.age) + " - " + events[idx]);
+        // Log with detailed encounter description
+        std::string detail = "Day " + std::to_string(t.age) + " - " + enc.description;
+        addLog(t, "PASS TIME", detail);
     } else {
-        addLog(t, "TIME", "Day " + std::to_string(t.age));
+        addLog(t, "PASS TIME", "Day " + std::to_string(t.age) + " passed without incident");
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN UI COMPONENT
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════���═══════════════════════════════
 
 class TamagotchiApp {
 public:
@@ -357,7 +395,7 @@ public:
             }),
             text(""),
             hbox({
-                actionButton("📅 TIME+EVENT", "5") | flex,
+                actionButton("⏳ PASS TIME", "5") | flex,
                 text(" "),
                 actionButton("💾 SAVE", "6") | flex,
             }),
@@ -456,7 +494,7 @@ int main() {
         } else if (event == Event::Character('4')) {
             healPet(app.pet);
         } else if (event == Event::Character('5')) {
-            ageAndEventTick(app.pet);
+            passTime(app.pet);
         } else if (event == Event::Character('6')) {
             if (savePet(app.pet)) {
                 app.setStatusMessage("Game saved to tama_save.txt");
