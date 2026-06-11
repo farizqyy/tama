@@ -53,7 +53,7 @@ struct Encounter {
 
 // ═══════════════════════════════════════════════════════════════
 // UTILITIES
-// ═══════════════════════════════════════════��═══════════════════
+// ═══════════════════════════════════════════════════════════════
 
 template<typename T>
 inline T clamp(T value, T minVal, T maxVal) {
@@ -346,7 +346,7 @@ void passTime(Tamagotchi& t) {
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN UI COMPONENT
-// ═══════════════════════════════���═══════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 class TamagotchiApp {
 public:
@@ -467,23 +467,154 @@ int main() {
     
     auto screen = ScreenInteractive::TerminalOutput();
     
-    TamagotchiApp app("Tama");
+    // Check if save file exists
+    bool has_save = saveFileExists();
+    int startup_choice = 0;  // 0 = new game, 1 = load game
+    std::string pet_name = "Tama";
     
-    // Try to load existing save
-    if (saveFileExists()) {
+    // STARTUP MENU
+    if (has_save) {
+        // Show choice menu
+        std::vector<std::string> options = {"NEW GAME", "LOAD GAME"};
+        int selected = 0;
+        
+        auto menu_renderer = Renderer([&] {
+            std::vector<Element> elements;
+            elements.push_back(
+                text(" ╔═══════════════════════════════════════╗ ") | color(primary_dark)
+            );
+            elements.push_back(
+                text(" ║     🐾 TAMAGOTCHI AERO 🐾           ║ ") | color(text_light) | bgcolor(primary_dark)
+            );
+            elements.push_back(
+                text(" ╚═══════════════════════════════════════╝ ") | color(primary_dark)
+            );
+            elements.push_back(text(""));
+            elements.push_back(
+                text(" Save file found! ") | bold | color(primary_dark) | center
+            );
+            elements.push_back(text(""));
+            elements.push_back(
+                text(" Select an option (use arrow keys or 1/2): ") | color(text_dark)
+            );
+            elements.push_back(text(""));
+            
+            for (int i = 0; i < (int)options.size(); i++) {
+                bool is_selected = (i == selected);
+                Color bg = is_selected ? primary_dark : bg_light_blue;
+                Color fg = is_selected ? text_light : text_dark;
+                elements.push_back(
+                    text(" " + std::to_string(i + 1) + ". " + options[i] + " ") | bold | bgcolor(bg) | color(fg) | center
+                );
+            }
+            
+            elements.push_back(text(""));
+            elements.push_back(
+                text(" Press ENTER or Space to confirm ") | color(accent_green) | center
+            );
+            
+            return vbox(elements) | border | color(primary_dark) | bgcolor(bg_gradient) | center;
+        });
+        
+        auto menu_component = CatchEvent(menu_renderer, [&](Event event) {
+            if (event == Event::Character('1')) {
+                selected = 0;
+                startup_choice = 0;
+                screen.ExitLoopClosure()();
+                return true;
+            } else if (event == Event::Character('2')) {
+                selected = 1;
+                startup_choice = 1;
+                screen.ExitLoopClosure()();
+                return true;
+            } else if (event == Event::ArrowUp) {
+                selected = (selected - 1 + (int)options.size()) % (int)options.size();
+                return true;
+            } else if (event == Event::ArrowDown) {
+                selected = (selected + 1) % (int)options.size();
+                return true;
+            } else if (event == Event::Return || event == Event::Character(' ')) {
+                startup_choice = selected;
+                screen.ExitLoopClosure()();
+                return true;
+            }
+            return false;
+        });
+        
+        screen.Loop(menu_component);
+    }
+    
+    TamagotchiApp app(pet_name);
+    
+    // Handle startup choice
+    if (startup_choice == 1 && has_save) {
+        // Load game
         if (loadPet(app.pet)) {
             app.setStatusMessage("Game loaded from tama_save.txt!");
         }
+    } else {
+        // New game - show naming screen
+        std::string input_name = "Tama";
+        bool name_confirmed = false;
+        
+        auto naming_renderer = Renderer([&] {
+            std::vector<Element> elements;
+            elements.push_back(
+                text(" ╔═══════════════════════════════════════╗ ") | color(primary_dark)
+            );
+            elements.push_back(
+                text(" ║     🐾 TAMAGOTCHI AERO 🐾           ║ ") | color(text_light) | bgcolor(primary_dark)
+            );
+            elements.push_back(
+                text(" ╚═══════════════════════════════════════╝ ") | color(primary_dark)
+            );
+            elements.push_back(text(""));
+            elements.push_back(
+                text(" What would you like to name your Tamagotchi? ") | bold | color(primary_dark) | center
+            );
+            elements.push_back(text(""));
+            elements.push_back(
+                text(" > " + input_name + " ") | border | color(text_light) | bgcolor(primary_dark)
+            );
+            elements.push_back(text(""));
+            elements.push_back(
+                text(" (Max 15 characters, press ENTER to continue) ") | color(accent_green) | center
+            );
+            
+            return vbox(elements) | border | color(primary_dark) | bgcolor(bg_gradient) | center;
+        });
+        
+        auto naming_component = CatchEvent(naming_renderer, [&](Event event) {
+            if (event.is_character()) {
+                char c = event.character()[0];
+                if (c >= 32 && c <= 126 && input_name.length() < 15) {
+                    input_name += c;
+                    return true;
+                }
+            } else if (event == Event::Backspace && !input_name.empty()) {
+                input_name.pop_back();
+                return true;
+            } else if (event == Event::Return) {
+                name_confirmed = true;
+                screen.ExitLoopClosure()();
+                return true;
+            }
+            return false;
+        });
+        
+        screen.Loop(naming_component);
+        
+        app.pet.name = input_name.empty() ? "Tama" : input_name;
+        app.setStatusMessage("Welcome " + app.pet.name + "! Let's begin!");
     }
     
+    // MAIN GAME LOOP
     std::function<void()> quit = screen.ExitLoopClosure();
     
-    // Render loop with input handling
     auto renderer = Renderer([&] {
         return app.render();
     });
     
-    // Numeric keybind handlers (1-8)
     auto handle_input = [&](Event event) {
         if (event == Event::Character('1')) {
             feedPet(app.pet);
